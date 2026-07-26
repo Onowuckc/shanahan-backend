@@ -1,0 +1,503 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/client"
+}
+
+enum Role {
+  SUPER_ADMIN
+  // Academic offices
+  REGISTRY_STAFF         // Registrar's Office
+  ADMISSIONS_STAFF       // Admission Office
+  LECTURER               // Academic staff / lecturers
+  EXAMS_RECORDS_STAFF    // Exams and Records office
+  FACULTY_OFFICER        // Faculty-level officer
+  DEPARTMENT_OFFICER     // Departmental officer
+  // Finance
+  BURSARY_STAFF          // Bursary / Finance Office
+  // Operations
+  ICT_ADMIN              // ICT / Admin
+  STUDENT_AFFAIRS_STAFF  // Student Affairs office
+  HOSTEL_ADMIN           // Hostel / Accommodation Admin
+  UNIVERSITY_MANAGEMENT  // Vice Chancellor, Provost, etc.
+  // Students
+  STUDENT
+  APPLICANT
+}
+
+enum PaymentStatus {
+  PENDING
+  PARTIAL
+  COMPLETED
+}
+
+enum AdmissionStatus {
+  PENDING
+  ADMITTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ModeOfEntry {
+  UTME
+  DIRECT_ENTRY
+  TRANSFER
+  POSTGRADUATE
+}
+
+// User model for cross-portal credentials
+model User {
+  id                     String            @id @default(uuid())
+  email                  String            @unique
+  username               String            @unique // Matric number, Staff ID, or Application Number
+  password               String            // Hashed
+  role                   Role              @default(STUDENT)
+  roles                  Role[]            // Array of all roles the user has
+  isEmailVerified        Boolean           @default(false)
+  isClaimed              Boolean           @default(false)
+  isFirstLogin           Boolean           @default(false)
+  verificationToken      String?
+  resetPasswordToken     String?
+  resetPasswordExpires   DateTime?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  student                StudentProfile?
+  staff                  StaffProfile?
+  applicant              ApplicantProfile?
+  auditLogs              AuditLog[]
+}
+
+model Faculty {
+  id            String         @id @default(uuid())
+  name          String         @unique
+  code          String         @unique // e.g. "NAS", "BMAS"
+  maxUnits      Int            @default(24)
+  departments   Department[]
+  feeStructures FeeStructure[]
+}
+
+model Department {
+  id            String           @id @default(uuid())
+  name          String           @unique
+  code          String           @unique // Numeric code e.g. "335"
+  facultyId     String
+  faculty       Faculty          @relation(fields: [facultyId], references: [id])
+  programs      Program[]
+  students      StudentProfile[]
+  courses       Course[]
+  feeStructures FeeStructure[]
+  maxUnitsConfigs DepartmentMaxUnits[]
+}
+
+model Program {
+  id           String                      @id @default(uuid())
+  name         String                      @unique // e.g. "B.Sc. Computer Science"
+  duration     Int                         @default(4) // Duration in years
+  departmentId String
+  department   Department                  @relation(fields: [departmentId], references: [id])
+  students     StudentProfile[]
+  applicants   ApplicantProfile[]
+  oLevelReqs   ProgrammeOLevelRequirement?
+  courses      Course[]
+  requirements ProgramRequirement[]
+}
+
+model StaffProfile {
+  id           String      @id @default(uuid())
+  staffId      String      @unique // e.g., SU/STF/26/101
+  userId       String      @unique
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName    String
+  lastName     String
+  phoneNumber  String?
+  departmentId String?
+  metadata     Json?
+  courses      Course[] // Courses taught by lecturer
+}
+
+model StudentProfile {
+  id                String          @id @default(uuid())
+  matricNumber      String          @unique // e.g., SU/CMP/26/1002
+  userId            String          @unique
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName         String
+  lastName          String
+  phoneNumber       String?
+  jambRegNo         String?         @unique
+  gender            String
+  dateOfBirth       DateTime
+  level             Int             @default(100) // 100, 200, 300, 400, 500, 600
+  departmentId      String
+  department        Department      @relation(fields: [departmentId], references: [id])
+  programId         String
+  program           Program         @relation(fields: [programId], references: [id])
+
+  // Extended fields from UMIS Section 4
+  passportPhotoUrl        String?
+  residentialAddress      String?
+  country                 String?   @default("Nigeria")
+  state                   String?
+  lga                     String?   // Local Government Area
+  admissionStatus         AdmissionStatus @default(ADMITTED)
+  modeOfEntry             ModeOfEntry     @default(UTME)
+  programType             String?   // e.g. "Full-Time", "Part-Time"
+  metadata                Json?
+
+  // Document URLs — §5.5
+  oLevelResultUrl         String?
+  birthCertificateUrl     String?
+  utmeResultUrl           String?
+  jambAdmissionLetterUrl  String?
+  stateOfOriginCertUrl    String?
+  medicalCertUrl          String?
+  guarantorFormUrl        String?
+
+  // Per-document verification status (set by Registry/Admissions officer)
+  // e.g. { "passport": "VERIFIED", "oLevel": "PENDING", "birthCert": "REJECTED" }
+  docVerificationStatus   Json?
+
+  registrations CourseRegistration[]
+  payments      Payment[]
+  hostelAllocations    HostelAllocation[]
+  offCampusApplications OffCampusApplication[]
+}
+
+model AcademicSession {
+  id        String             @id @default(uuid())
+  name      String             @unique // e.g. "2025/2026"
+  isCurrent Boolean            @default(false)
+  semesters Semester[]
+  payments  Payment[]
+  courseReg CourseRegistration[]
+  feeStructures      FeeStructure[]
+  hostelAllocations  HostelAllocation[]
+  offCampusApplications OffCampusApplication[]
+  maxUnitsConfigs    DepartmentMaxUnits[]
+}
+
+model Semester {
+  id        String             @id @default(uuid())
+  name      String             // e.g. "First" or "Second"
+  isCurrent Boolean            @default(false)
+  sessionId String
+  session   AcademicSession    @relation(fields: [sessionId], references: [id])
+  payments  Payment[]
+  courseReg CourseRegistration[]
+  feeStructures FeeStructure[]
+  maxUnitsConfigs DepartmentMaxUnits[]
+}
+
+model Course {
+  id           String             @id @default(uuid())
+  code         String             @unique // e.g., "CMP 101"
+  title        String
+  creditUnits  Int
+  departmentId String
+  department   Department         @relation(fields: [departmentId], references: [id])
+  lecturerId   String?
+  lecturer     StaffProfile?      @relation(fields: [lecturerId], references: [id])
+  registrations RegisteredCourse[]
+  
+  // Prerequisites relations
+  prerequisites  CoursePrerequisite[] @relation("CourseToPrerequisite")
+  prerequisiteFor CoursePrerequisite[] @relation("PrerequisiteToCourse")
+
+  // New fields:
+  level        Int                @default(100)
+  semester     Int                @default(1) // 1 = First, 2 = Second
+  isCore       Boolean            @default(true)
+  programId    String?
+  program      Program?           @relation(fields: [programId], references: [id], onDelete: SetNull)
+}
+
+model CoursePrerequisite {
+  courseId       String
+  course         Course @relation("CourseToPrerequisite", fields: [courseId], references: [id], onDelete: Cascade)
+  prerequisiteId String
+  prerequisite   Course @relation("PrerequisiteToCourse", fields: [prerequisiteId], references: [id], onDelete: Cascade)
+
+  @@id([courseId, prerequisiteId])
+}
+
+model DepartmentMaxUnits {
+  id            String          @id @default(uuid())
+  departmentId  String
+  department    Department      @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  sessionId     String
+  session       AcademicSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  semesterId    String
+  semester      Semester        @relation(fields: [semesterId], references: [id], onDelete: Cascade)
+  maxUnits      Int             @default(24) // configurable
+
+  @@unique([departmentId, sessionId, semesterId])
+}
+
+model CourseRegistration {
+  id           String             @id @default(uuid())
+  studentId    String
+  student      StudentProfile     @relation(fields: [studentId], references: [id])
+  sessionId    String
+  session      AcademicSession    @relation(fields: [sessionId], references: [id])
+  semesterId   String
+  semester     Semester           @relation(fields: [semesterId], references: [id])
+  level        Int
+  isApproved   Boolean            @default(false)
+  createdAt    DateTime           @default(now())
+  courses      RegisteredCourse[]
+
+  @@unique([studentId, sessionId, semesterId])
+}
+
+model RegisteredCourse {
+  id             String             @id @default(uuid())
+  registrationId String
+  registration   CourseRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  courseId       String
+  course         Course             @relation(fields: [courseId], references: [id])
+  caScore        Float?             // Continuous Assessment (e.g., /40)
+  examScore      Float?             // Exam (e.g., /60)
+  grade          String?            // e.g. "A", "B", "C"
+  gradePoint     Float?             // Grade points (e.g., 5.0, 4.0)
+}
+
+model Payment {
+  id           String          @id @default(uuid())
+  studentId    String?
+  student      StudentProfile? @relation(fields: [studentId], references: [id])
+  applicantId  String?
+  applicant    ApplicantProfile? @relation(fields: [applicantId], references: [id])
+  sessionId    String
+  session      AcademicSession @relation(fields: [sessionId], references: [id])
+  semesterId   String
+  semester     Semester        @relation(fields: [semesterId], references: [id])
+  amountDue    Float           // Sum of all applicable FeeStructure amounts
+  amountPaid   Float           @default(0)
+  status       PaymentStatus   @default(PENDING)
+  txReference  String?         @unique // Paystack transaction reference
+  paystackRef  String?         // Internal Paystack reference
+  paymentDate  DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  items        PaymentItem[]   // Breakdown per fee category
+}
+
+// Stores each line-item of a payment (e.g., Tuition: 80000, Library: 5000)
+model PaymentItem {
+  id              String        @id @default(uuid())
+  paymentId       String
+  payment         Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  feeCategoryId   String
+  feeCategory     FeeCategory   @relation(fields: [feeCategoryId], references: [id])
+  amountDue       Float
+  amountPaid      Float         @default(0)
+}
+
+// Admin-managed list of fee types (e.g., Tuition, Library, ICT, Medical)
+model FeeCategory {
+  id          String         @id @default(uuid())
+  name        String         @unique // e.g. "Tuition Fee", "Library Fee"
+  description String?
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  structures  FeeStructure[]
+  paymentItems PaymentItem[]
+}
+
+// Admin configures the exact amount for each fee category
+// scoped to: session + semester + level + (optionally faculty or department)
+model FeeStructure {
+  id              String           @id @default(uuid())
+  feeCategoryId   String
+  feeCategory     FeeCategory      @relation(fields: [feeCategoryId], references: [id])
+  sessionId       String
+  session         AcademicSession  @relation(fields: [sessionId], references: [id])
+  semesterId      String
+  semester        Semester         @relation(fields: [semesterId], references: [id])
+  level           Int?             // null = applies to all levels
+  facultyId       String?          // null = applies to all faculties
+  faculty         Faculty?         @relation(fields: [facultyId], references: [id])
+  departmentId    String?          // null = applies to all departments
+  department      Department?      @relation(fields: [departmentId], references: [id])
+  amount          Float
+  isActive        Boolean          @default(true)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([feeCategoryId, sessionId, semesterId, level, facultyId, departmentId])
+}
+
+// ─── HOSTEL MODULE ────────────────────────────────────────────────────────────
+
+enum HostelGender {
+  MALE
+  FEMALE
+  MIXED
+}
+
+enum AllocationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  VACATED
+}
+
+// A physical hostel block/building on campus
+model Hostel {
+  id             String           @id @default(uuid())
+  name           String           @unique  // e.g. "Block A", "Queen's Hall"
+  gender         HostelGender
+  totalCapacity  Int              // Maximum number of students
+  allowedLevels  Int[]            // e.g. [100, 200] — empty array = all levels allowed
+  isActive       Boolean          @default(true)
+  isLocked       Boolean          @default(false) // Locked when capacity is reached
+  description    String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  allocations    HostelAllocation[]
+}
+
+// A single allocation record: one student allocated to one hostel for a session
+model HostelAllocation {
+  id          String           @id @default(uuid())
+  studentId   String
+  student     StudentProfile   @relation(fields: [studentId], references: [id])
+  hostelId    String
+  hostel      Hostel           @relation(fields: [hostelId], references: [id])
+  sessionId   String
+  session     AcademicSession  @relation(fields: [sessionId], references: [id])
+  status      AllocationStatus @default(PENDING)
+  allocatedAt DateTime         @default(now())
+  approvedAt  DateTime?
+  approvedById String?         // StaffProfile id of the approving officer
+  note        String?          // Admin notes (e.g. reason for rejection)
+
+  @@unique([studentId, sessionId]) // One allocation per student per session
+}
+
+// Off-campus accommodation application (submitted by student via portal)
+model OffCampusApplication {
+  id              String           @id @default(uuid())
+  studentId       String
+  student         StudentProfile   @relation(fields: [studentId], references: [id])
+  sessionId       String
+  session         AcademicSession  @relation(fields: [sessionId], references: [id])
+  reason          String           // Student's stated reason
+  address         String           // Off-campus address
+  landlordName    String?
+  landlordPhone   String?
+  documentUrl     String?          // URL to uploaded written application scan
+  status          AllocationStatus @default(PENDING)
+  submittedAt     DateTime         @default(now())
+  reviewedAt      DateTime?
+  reviewedById    String?          // StaffProfile id of reviewer
+  reviewNote      String?          // Admin feedback / note
+
+  @@unique([studentId, sessionId]) // One application per student per session
+}
+
+// ─── APPLICANT / ADMISSION MODULE ─────────────────────────────────────────────
+model ApplicantProfile {
+  id             String          @id @default(uuid())
+  applicationNo  String          @unique // e.g. SU/APP/26/1001
+  userId         String          @unique
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName      String
+  lastName       String
+  phoneNumber    String?
+  gender         String
+  dateOfBirth    DateTime
+  jambRegNo      String?         @unique
+  programId      String?
+  program        Program?        @relation(fields: [programId], references: [id])
+  admissionYear  Int
+  admissionStatus AdmissionStatus @default(PENDING)
+  modeOfEntry    ModeOfEntry     @default(UTME)
+  programType    String?         // e.g. "Full-Time"
+
+  // Personal details
+  residentialAddress  String?
+  country             String?   @default("Nigeria")
+  state               String?
+  lga                 String?
+
+  // Document URLs — §5.5
+  passportPhotoUrl       String?
+  oLevelResultUrl        String?
+  birthCertificateUrl    String?
+  utmeResultUrl          String?
+  jambAdmissionLetterUrl String?
+  stateOfOriginCertUrl   String?
+  medicalCertUrl         String?
+  guarantorFormUrl       String?
+
+  // Per-document verification status (set by Admissions officer)
+  docVerificationStatus  Json?
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  payments       Payment[]
+}
+
+// ─── O'LEVEL REQUIREMENTS ─────────────────────────────────────────────────────
+// §5.4 — Configurable per programme by Admissions/Registry admin
+model ProgrammeOLevelRequirement {
+  id              String   @id @default(uuid())
+  programId       String   @unique
+  program         Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  minCredits      Int      @default(5)    // Minimum O'Level credit passes required
+  requireMath     Boolean  @default(false) // Is Mathematics required?
+  requireEnglish  Boolean  @default(false) // Is English Language required?
+  notes           String?                 // Additional admission requirements
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── SCORE CONFIGURATION ──────────────────────────────────────────────────────
+// §4.4 — CA/Exam split configurable at system, faculty, department, or course level
+// Lower scope overrides higher: COURSE > DEPARTMENT > FACULTY > SYSTEM
+model ScoreConfig {
+  id        String   @id @default(uuid())
+  scope     String   // 'SYSTEM' | 'FACULTY' | 'DEPARTMENT' | 'COURSE'
+  scopeId   String?  // null for SYSTEM scope; faculty/dept/course UUID otherwise
+  caMax     Float    @default(40)
+  examMax   Float    @default(60)
+  updatedAt DateTime @updatedAt
+
+  @@unique([scope, scopeId])
+}
+
+// ─── AUDIT LOG ────────────────────────────────────────────────────────────────
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  action     String   // e.g. "CREATE_STUDENT", "UPDATE_FEE_STRUCTURE", "LOGIN"
+  entityType String?  // e.g. "StudentProfile", "Payment"
+  entityId   String?  // ID of the affected record
+  details    String?  // JSON string with before/after or extra context
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+}
+
+model SystemSetting {
+  id    String @id @default(uuid())
+  key   String @unique
+  value Json
+}
+
+model ProgramRequirement {
+  id               String      @id @default(uuid())
+  programId        String
+  program          Program     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  level            Int         // 100, 200, 300, 400, 500, 600
+  semester         Int         // 1 (First), 2 (Second)
+  minElectives     Int         @default(0)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@unique([programId, level, semester])
+}
