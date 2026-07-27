@@ -90,6 +90,7 @@ import {
   updateUserRole,
   adminResetPassword,
   toggleUserVerified,
+} from '../controllers/userManagementController';
 import {
   getAdminBiodataRequests,
   approveBiodataRequest,

@@ -12,6 +12,7 @@ import {
   requestHostelAllocation,
   getStudentResults,
   submitOffCampusApplication
+} from '../controllers/studentPortalController';
 import {
   submitBiodataRequest,
   getMyBiodataRequests
