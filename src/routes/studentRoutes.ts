@@ -12,7 +12,10 @@ import {
   requestHostelAllocation,
   getStudentResults,
   submitOffCampusApplication
-} from '../controllers/studentPortalController';
+import {
+  submitBiodataRequest,
+  getMyBiodataRequests
+} from '../controllers/biodataController';
 
 const router = Router();
 
@@ -29,5 +32,7 @@ router.get('/hostels', listHostelsForStudent);
 router.post('/hostels/allocate', requestHostelAllocation);
 router.post('/hostels/off-campus', submitOffCampusApplication);
 router.get('/results', getStudentResults);
+router.post('/biodata-request', submitBiodataRequest);
+router.get('/biodata-requests', getMyBiodataRequests);
 
 export default router;

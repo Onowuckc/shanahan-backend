@@ -165,6 +165,7 @@ model StudentProfile {
   payments      Payment[]
   hostelAllocations    HostelAllocation[]
   offCampusApplications OffCampusApplication[]
+  biodataRequests       BiodataChangeRequest[]
 }
 
 model AcademicSession {
@@ -501,3 +502,25 @@ model ProgramRequirement {
 
   @@unique([programId, level, semester])
 }
+
+// ─── BIODATA CHANGE REQUESTS ─────────────────────────────────────────────────
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model BiodataChangeRequest {
+  id            String         @id @default(uuid())
+  studentId     String
+  student       StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  requestedData Json           // JSON object with requested changes (firstName, lastName, dateOfBirth, gender, state, lga, etc.)
+  reason        String         // Reason for biodata update
+  documentUrl   String?        // URL to uploaded supporting document (affidavit, publication, birth cert)
+  status        RequestStatus  @default(PENDING)
+  adminNote     String?        // Admin review comments
+  reviewedById  String?        // StaffProfile ID of approving officer
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+

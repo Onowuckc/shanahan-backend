@@ -4,8 +4,9 @@
   "description": "Backend API for Shanahan University UMIS",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "start": "node dist/index.js",
+    "seed": "ts-node prisma/seed.ts",
     "dev": "nodemon src/index.ts"
   },
   "dependencies": {

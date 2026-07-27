@@ -90,7 +90,11 @@ import {
   updateUserRole,
   adminResetPassword,
   toggleUserVerified,
-} from '../controllers/userManagementController';
+import {
+  getAdminBiodataRequests,
+  approveBiodataRequest,
+  rejectBiodataRequest
+} from '../controllers/biodataController';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -207,5 +211,10 @@ router.post('/settings/system', verifyToken, checkAccess('settings', 'write'), u
 router.get('/settings/score-configs', verifyToken, checkAccess('academic_records', 'read'), listScoreConfigs);
 router.post('/settings/score-configs', verifyToken, checkAccess('academic_records', 'write'), upsertScoreConfig);
 router.delete('/settings/score-configs/:id', verifyToken, checkAccess('academic_records', 'delete'), deleteScoreConfig);
+
+// ─── BIODATA CHANGE REQUESTS (Registry / Admin) ─────────────────────────────────
+router.get('/biodata-requests', verifyToken, checkAccess('students', 'read'), getAdminBiodataRequests);
+router.put('/biodata-requests/:id/approve', verifyToken, checkAccess('students', 'write'), approveBiodataRequest);
+router.put('/biodata-requests/:id/reject', verifyToken, checkAccess('students', 'write'), rejectBiodataRequest);
 
 export default router;
