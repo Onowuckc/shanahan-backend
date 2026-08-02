@@ -6,6 +6,7 @@
   "scripts": {
     "build": "prisma generate && tsc",
     "start": "node dist/index.js",
+    "clean-db": "ts-node prisma/clean_db.ts",
     "seed": "ts-node prisma/seed.ts",
     "dev": "nodemon src/index.ts"
   },
