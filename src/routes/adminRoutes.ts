@@ -54,6 +54,7 @@ import {
   listStaff,
   getStaff,
   updateStaff,
+  deleteStaff,
   listCourses,
   createCourse,
   updateCourse,
@@ -129,6 +130,7 @@ router.put('/applicants/:id/admission-status', verifyToken, checkAccess('admissi
 router.get('/staff', verifyToken, checkAccess('staff', 'read'), listStaff);
 router.get('/staff/:id', verifyToken, checkAccess('staff', 'read'), getStaff);
 router.put('/staff/:id', verifyToken, checkAccess('staff', 'write'), updateStaff);
+router.delete('/staff/:id', verifyToken, checkAccess('staff', 'delete'), deleteStaff);
 
 // ─── FACULTIES ───────────────────────────────────────────────────────────────
 router.get('/faculties', verifyToken, listFaculties);

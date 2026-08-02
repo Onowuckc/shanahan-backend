@@ -82,6 +82,43 @@ export async function updateStaff(req: AuthRequest, res: Response) {
   }
 }
 
+// ─── DELETE STAFF ─────────────────────────────────────────────────────────────
+export async function deleteStaff(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params; // StaffProfile.id
+
+    const staff = await prisma.staffProfile.findUnique({
+      where: { id },
+      include: { user: true }
+    });
+
+    if (!staff) {
+      return res.status(404).json({ error: 'Staff profile not found.' });
+    }
+
+    if (req.user?.userId === staff.userId) {
+      return res.status(400).json({ error: 'You cannot delete your own account.' });
+    }
+
+    // Unassign lecturer from any courses
+    await prisma.course.updateMany({
+      where: { lecturerId: staff.id },
+      data: { lecturerId: null }
+    });
+
+    // Delete the User account (which cascades to StaffProfile)
+    await prisma.user.delete({
+      where: { id: staff.userId }
+    });
+
+    return res.json({ message: 'Staff member account deleted successfully.' });
+  } catch (error: any) {
+    console.error('deleteStaff error:', error);
+    return res.status(500).json({ error: 'Failed to delete staff member account.' });
+  }
+}
+
+
 // ─── LIST COURSES ─────────────────────────────────────────────────────────────
 export async function listCourses(req: AuthRequest, res: Response) {
   try {
