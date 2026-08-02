@@ -244,3 +244,115 @@ export async function toggleUserVerified(req: AuthRequest, res: Response) {
     return res.status(500).json({ error: 'Internal server error.' });
   }
 }
+
+// ─── UPDATE ADMIN USER ACCOUNT DETAILS ─────────────────────────────────────────
+export async function updateAdminUser(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params; // User.id (UUID)
+    const { firstName, lastName, email, phoneNumber, departmentId, role, roles } = req.body;
+
+    const userToUpdate = await prisma.user.findUnique({
+      where: { id },
+      include: { staff: true }
+    });
+
+    if (!userToUpdate) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    // Check duplicate email if changed
+    if (email && email.trim().toLowerCase() !== userToUpdate.email) {
+      const emailClean = email.trim().toLowerCase();
+      const existingEmail = await prisma.user.findUnique({ where: { email: emailClean } });
+      if (existingEmail) return res.status(400).json({ error: 'Email already in use.' });
+    }
+
+    let finalRole = role || userToUpdate.role;
+    let finalRoles = roles || userToUpdate.roles;
+    if (roles && Array.isArray(roles)) {
+      if (roles.length === 0) {
+        return res.status(400).json({ error: 'At least one role must be assigned.' });
+      }
+      finalRole = roles[0];
+      finalRoles = roles;
+    } else if (role) {
+      finalRole = role;
+      finalRoles = [role];
+    }
+
+    const forbiddenRoles = ['STUDENT', 'APPLICANT'];
+    if (finalRoles.some((r: any) => forbiddenRoles.includes(r))) {
+      return res.status(400).json({ error: 'Cannot assign STUDENT or APPLICANT roles via this endpoint.' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id },
+        data: {
+          email: email ? email.trim().toLowerCase() : undefined,
+          role: finalRole,
+          roles: finalRoles
+        }
+      });
+
+      if (userToUpdate.staff) {
+        await tx.staffProfile.update({
+          where: { userId: id },
+          data: {
+            firstName: firstName !== undefined ? firstName.trim() : undefined,
+            lastName: lastName !== undefined ? lastName.trim() : undefined,
+            phoneNumber: phoneNumber !== undefined ? (phoneNumber?.trim() || null) : undefined,
+            departmentId: departmentId !== undefined ? (departmentId || null) : undefined
+          }
+        });
+      }
+
+      return updatedUser;
+    });
+
+    return res.json({ message: 'User account updated successfully.', data: result });
+  } catch (error: any) {
+    console.error('updateAdminUser error:', error);
+    if (error.code === 'P2002') return res.status(400).json({ error: 'Duplicate email.' });
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+}
+
+// ─── DELETE ADMIN USER ACCOUNT ────────────────────────────────────────────────
+export async function deleteAdminUser(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params; // User.id (UUID)
+
+    if (req.user?.userId === id) {
+      return res.status(400).json({ error: 'You cannot delete your own account.' });
+    }
+
+    const userToDelete = await prisma.user.findUnique({
+      where: { id },
+      include: { staff: true }
+    });
+
+    if (!userToDelete) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    // Unassign lecturerId from courses if applicable
+    if (userToDelete.staff) {
+      await prisma.course.updateMany({
+        where: { lecturerId: userToDelete.staff.id },
+        data: { lecturerId: null }
+      });
+    }
+
+    // Delete user record (cascades to StaffProfile via onDelete: Cascade)
+    await prisma.user.delete({
+      where: { id }
+    });
+
+    return res.json({ message: 'User account deleted successfully.' });
+  } catch (error: any) {
+    console.error('deleteAdminUser error:', error);
+    return res.status(500).json({ error: 'Failed to delete user account.' });
+  }
+}
+

@@ -87,9 +87,11 @@ import {
 import {
   listAdminUsers,
   createAdminUser,
+  updateAdminUser,
   updateUserRole,
   adminResetPassword,
   toggleUserVerified,
+  deleteAdminUser,
 } from '../controllers/userManagementController';
 import {
   getAdminBiodataRequests,
@@ -197,9 +199,11 @@ router.put('/hostel-allocations/:id', verifyToken, checkAccess('hostels', 'write
 // ─── USER MANAGEMENT (Admin/ICT only) ──────────────────────────────────────────────
 router.get('/users', verifyToken, checkAccess('user_management', 'read'), listAdminUsers);
 router.post('/users', verifyToken, checkAccess('user_management', 'write'), createAdminUser);
+router.put('/users/:id', verifyToken, checkAccess('user_management', 'write'), updateAdminUser);
 router.put('/users/:id/role', verifyToken, checkAccess('user_management', 'write'), updateUserRole);
 router.put('/users/:id/reset-password', verifyToken, checkAccess('user_management', 'write'), adminResetPassword);
 router.put('/users/:id/toggle-verified', verifyToken, checkAccess('user_management', 'write'), toggleUserVerified);
+router.delete('/users/:id', verifyToken, checkAccess('user_management', 'delete'), deleteAdminUser);
 
 // ─── AUDIT LOGS ─────────────────────────────────────────────────────────────────
 router.get('/audit-logs', verifyToken, checkAccess('audit_logs', 'read'), listAuditLogs);
