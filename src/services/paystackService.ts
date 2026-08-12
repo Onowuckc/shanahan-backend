@@ -7,6 +7,7 @@ interface InitializeResult {
     authorization_url: string;
     access_code: string;
     reference: string;
+    is_simulated?: boolean;
   };
 }
 
@@ -24,10 +25,11 @@ interface VerifyResult {
 
 function getSimulatedTransaction(amountInNaira: number, email: string, callbackUrl?: string): InitializeResult {
   const mockRef = `SU_MOCK_${amountInNaira}_${Math.floor(100000 + Math.random() * 900000)}`;
+  const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
   
   const redirectUrl = callbackUrl 
     ? `${callbackUrl}${callbackUrl.includes('?') ? '&' : '?'}reference=${mockRef}`
-    : `http://localhost:5173/payments?reference=${mockRef}`;
+    : `${baseUrl}/payments?reference=${mockRef}`;
 
   return {
     status: true,
@@ -35,7 +37,8 @@ function getSimulatedTransaction(amountInNaira: number, email: string, callbackU
     data: {
       authorization_url: redirectUrl,
       access_code: `MOCK_ACCESS_${mockRef}`,
-      reference: mockRef
+      reference: mockRef,
+      is_simulated: true
     }
   };
 }

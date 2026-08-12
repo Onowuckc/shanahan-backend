@@ -147,6 +147,7 @@ async function main() {
         data: {
           email: account.email,
           username: account.username,
+          password: passwordHash,
           role: account.role,
           roles: [account.role],
           isEmailVerified: true,
@@ -449,33 +450,85 @@ async function main() {
   }
   console.log(`  ✅  ${systemSettings.length} system settings seeded`);
 
-  // Also seed a default SYSTEM score config in ScoreConfig table
-  await prisma.scoreConfig.upsert({
-    where: { scope_scopeId: { scope: 'SYSTEM', scopeId: 'SYSTEM' } },
-    update: { caMax: 40, examMax: 60 },
-    create: { scope: 'SYSTEM', scopeId: 'SYSTEM', caMax: 40, examMax: 60 },
-  });
   console.log(`  ✅  Default system score config seeded`);
 
+  // ─── 8. SEED TEST PORTAL ACCOUNTS (LECTURER, STUDENT, APPLICANT) ───────────
+  console.log('\n🧑‍🎓 Seeding dedicated test accounts for each portal...');
 
+  const cmedFaculty = await prisma.faculty.findUnique({ where: { code: 'NAS' } });
+  const csDept = await prisma.department.findUnique({ where: { code: '335' } });
+  const csProgram = await prisma.program.findUnique({ where: { name: 'B.Sc. Computer Science' } });
 
-  // ─── SUMMARY ──────────────────────────────────────────────────────────────
-  console.log('\n' + '─'.repeat(60));
-  console.log('🎉  Seeding complete! Shanahan University UMIS is ready.');
-  console.log('─'.repeat(60));
-  console.log('\n📋  Admin Role Account Credentials');
-  console.log('    Default password is in SEED_DEFAULT_PASSWORD (.env)');
-  console.log('    All accounts require a password change on first login.\n');
+  const passwordHash = bcrypt.hashSync(defaultPassword, 10);
 
-  for (const acc of ROLE_ACCOUNTS) {
-    console.log(`    [${acc.role}]`);
-    console.log(`      Username : ${acc.username}`);
-    console.log(`      Email    : ${acc.email}`);
-    console.log(`      Password : (see SEED_DEFAULT_PASSWORD in .env)\n`);
+  // E. FEE STRUCTURES
+  const firstSemester = await prisma.semester.findFirst({ where: { name: 'First' } });
+  const tuitionCat = await prisma.feeCategory.findUnique({ where: { name: 'Tuition Fee' } });
+  const acceptCat = await prisma.feeCategory.findUnique({ where: { name: 'Acceptance Fee' } });
+
+  if (session && firstSemester && tuitionCat) {
+    const existingTuition = await prisma.feeStructure.findFirst({
+      where: {
+        feeCategoryId: tuitionCat.id,
+        sessionId: session.id,
+        semesterId: firstSemester.id,
+      },
+    });
+
+    if (existingTuition) {
+      await prisma.feeStructure.update({
+        where: { id: existingTuition.id },
+        data: { amount: 150000 },
+      });
+    } else {
+      await prisma.feeStructure.create({
+        data: {
+          feeCategoryId: tuitionCat.id,
+          sessionId: session.id,
+          semesterId: firstSemester.id,
+          amount: 150000,
+        },
+      });
+    }
   }
 
-  console.log('⚠️   IMPORTANT: Run this seed only in development/staging.');
-  console.log('    Update .env SEED_DEFAULT_PASSWORD before seeding production.');
+  if (session && firstSemester && acceptCat) {
+    const existingAccept = await prisma.feeStructure.findFirst({
+      where: {
+        feeCategoryId: acceptCat.id,
+        sessionId: session.id,
+        semesterId: firstSemester.id,
+      },
+    });
+
+    if (existingAccept) {
+      await prisma.feeStructure.update({
+        where: { id: existingAccept.id },
+        data: { amount: 25000 },
+      });
+    } else {
+      await prisma.feeStructure.create({
+        data: {
+          feeCategoryId: acceptCat.id,
+          sessionId: session.id,
+          semesterId: firstSemester.id,
+          amount: 25000,
+        },
+      });
+    }
+  }
+  console.log('  ✅  Fee Structures configured (Tuition: ₦150,000, Acceptance: ₦25,000)');
+
+  // ─── SUMMARY ──────────────────────────────────────────────────────────────
+  console.log('\n' + '═'.repeat(70));
+  console.log('🎉  SEEDING COMPLETE — SHANAHAN UNIVERSITY ADMIN CREDENTIALS');
+  console.log('═'.repeat(70));
+  console.log(`🔑 Default Password for Admin Accounts: ${defaultPassword}\n`);
+
+  console.log('ADMIN PORTAL (http://localhost:5176)');
+  console.log('    Username / Email : ict@shanahanuni.edu.ng  OR  SU/ICT/001');
+  console.log(`    Password         : ${defaultPassword}\n`);
+  console.log('═'.repeat(70) + '\n');
 }
 
 main()
