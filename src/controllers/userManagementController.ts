@@ -2,6 +2,7 @@ import { Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../prisma';
 import { AuthRequest } from '../middleware/auth';
+import { createAuditLog } from './reportController';
 
 // ─── LIST ADMIN/STAFF USERS ───────────────────────────────────────────────────
 export async function listAdminUsers(req: AuthRequest, res: Response) {
@@ -216,6 +217,17 @@ export async function adminResetPassword(req: AuthRequest, res: Response) {
         resetPasswordExpires: null
       }
     });
+
+    if (req.user?.userId) {
+      await createAuditLog(
+        req.user.userId,
+        'ADMIN_RESET_PASSWORD',
+        'User',
+        id,
+        'Admin force-reset user password and required change on next login',
+        req.ip
+      );
+    }
 
     return res.json({ message: 'Password reset. The user will be required to change it on next login.' });
   } catch (error: any) {

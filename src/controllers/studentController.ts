@@ -1,6 +1,8 @@
 import { Response } from 'express';
+import bcrypt from 'bcryptjs';
 import prisma from '../prisma';
 import { AuthRequest } from '../middleware/auth';
+import { generateMatricNumber } from '../services/matricService';
 
 // ─── LIST STUDENTS ────────────────────────────────────────────────────────────
 export async function listStudents(req: AuthRequest, res: Response) {
@@ -245,3 +247,122 @@ export async function studentStats(req: AuthRequest, res: Response) {
     return res.status(500).json({ error: 'Internal server error.' });
   }
 }
+
+// ─── CREATE STUDENT MANUALLY (Admin / ICT) ──────────────────────────────────
+export async function createStudent(req: AuthRequest, res: Response) {
+  try {
+    const {
+      firstName,
+      lastName,
+      email,
+      phoneNumber,
+      gender,
+      dateOfBirth,
+      departmentId,
+      programId,
+      level = 100,
+      modeOfEntry = 'UTME',
+      programType = 'Full-Time',
+      admissionYear = new Date().getFullYear(),
+      jambRegNo,
+    } = req.body;
+
+    if (!firstName || !lastName || !departmentId || !programId) {
+      return res.status(400).json({
+        error: 'First name, last name, department, and program are required.',
+      });
+    }
+
+    // Check department & program exist
+    const department = await prisma.department.findUnique({ where: { id: departmentId } });
+    if (!department) {
+      return res.status(404).json({ error: 'Department not found.' });
+    }
+
+    const program = await prisma.program.findUnique({ where: { id: programId } });
+    if (!program) {
+      return res.status(404).json({ error: 'Program not found.' });
+    }
+
+    // Generate institutional email if not provided
+    let studentEmail = email?.trim().toLowerCase();
+    if (!studentEmail) {
+      const base = `${firstName.toLowerCase().replace(/[^a-z]/g, '')}.${lastName.toLowerCase().replace(/[^a-z]/g, '')}`;
+      studentEmail = `${base}@shanahanuni.edu.ng`;
+      let count = 0;
+      while (true) {
+        const existing = await prisma.user.findUnique({ where: { email: studentEmail } });
+        if (!existing) break;
+        count++;
+        studentEmail = `${base}${count}@shanahanuni.edu.ng`;
+      }
+    } else {
+      const existingUser = await prisma.user.findUnique({ where: { email: studentEmail } });
+      if (existingUser) {
+        return res.status(400).json({ error: 'A user with this email address already exists.' });
+      }
+    }
+
+    // Generate Matriculation Number
+    const matricNumber = await generateMatricNumber(departmentId, parseInt(String(admissionYear)));
+
+    // Generate Temporary Password
+    const temporaryPassword = `SU-Pass-${Math.floor(100000 + Math.random() * 900000)}`;
+    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
+
+    // Create user & student profile in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: studentEmail,
+          username: matricNumber,
+          password: hashedPassword,
+          role: 'STUDENT',
+          roles: ['STUDENT'],
+          isEmailVerified: true,
+          isFirstLogin: true,
+        },
+      });
+
+      const student = await tx.studentProfile.create({
+        data: {
+          matricNumber,
+          userId: user.id,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phoneNumber: phoneNumber?.trim() || null,
+          gender: gender ? gender.trim().toUpperCase() : 'MALE',
+          dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : new Date('2005-01-01'),
+          departmentId,
+          programId,
+          level: parseInt(String(level)),
+          modeOfEntry,
+          programType,
+          admissionStatus: 'ADMITTED',
+          jambRegNo: jambRegNo?.trim().toUpperCase() || null,
+        },
+        include: {
+          department: { include: { faculty: true } },
+          program: true,
+          user: { select: { email: true, id: true } },
+        },
+      });
+
+      return { student, user };
+    });
+
+    return res.status(201).json({
+      message: 'Student created successfully.',
+      data: result.student,
+      credentials: {
+        matricNumber,
+        email: studentEmail,
+        temporaryPassword,
+      },
+    });
+  } catch (error: any) {
+    console.error('createStudent error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error.' });
+  }
+}
+

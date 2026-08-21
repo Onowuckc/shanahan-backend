@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import prisma from '../prisma';
 import { AuthRequest } from '../middleware/auth';
+import { sendVerificationEmail, sendPasswordResetEmail } from '../utils/emailService';
 
 export async function login(req: Request, res: Response) {
   try {
@@ -307,12 +308,11 @@ export async function registerApplicant(req: Request, res: Response) {
       return { user, profile };
     });
 
-    console.log(`[Email Verification System] Sent token to ${emailClean}: ${verificationToken}`);
+    await sendVerificationEmail(emailClean, verificationToken);
 
     return res.status(201).json({
-      message: 'Applicant registration successful. Please verify your email.',
-      applicationNo: result.profile.applicationNo,
-      verificationToken // returned for development and testing convenience
+      message: 'Applicant registration successful. Please check your email to verify your account.',
+      applicationNo: result.profile.applicationNo
     });
 
   } catch (error: any) {
@@ -378,11 +378,10 @@ export async function resendVerification(req: Request, res: Response) {
       data: { verificationToken }
     });
 
-    console.log(`[Email Verification System] Resent token to ${user.email}: ${verificationToken}`);
+    await sendVerificationEmail(user.email, verificationToken);
 
     return res.status(200).json({
-      message: 'Verification email resent.',
-      verificationToken // returned for testing convenience
+      message: 'Verification email has been sent to your inbox.'
     });
 
   } catch (error: any) {
@@ -411,7 +410,7 @@ export async function forgotPassword(req: Request, res: Response) {
     }
 
     const resetPasswordToken = crypto.randomBytes(32).toString('hex');
-    const resetPasswordExpires = new Date(Date.now() + 3600000); // 1 hour expiry
+    const resetPasswordExpires = new Date(Date.now() + 15 * 60000); // 15 minutes expiry
 
     await prisma.user.update({
       where: { id: user.id },
@@ -421,11 +420,10 @@ export async function forgotPassword(req: Request, res: Response) {
       }
     });
 
-    console.log(`[Password Reset System] Token for ${user.email}: ${resetPasswordToken}`);
+    await sendPasswordResetEmail(user.email, resetPasswordToken);
 
     return res.status(200).json({
-      message: 'If the email exists, a password reset link has been sent.',
-      resetPasswordToken // returned for testing convenience
+      message: 'If the email exists, a password reset link has been sent.'
     });
 
   } catch (error: any) {
@@ -566,8 +564,7 @@ export async function claimAccountVerify(req: Request, res: Response) {
 
     return res.status(200).json({
       message: 'Identity verified successfully.',
-      email: obfuscatedEmail,
-      verificationToken: verificationCode // Returned for development convenience
+      email: obfuscatedEmail
     });
 
   } catch (error: any) {

@@ -4,6 +4,7 @@ import { requireRoles, checkAccess } from '../middleware/rbac';
 import {
   listStudents,
   getStudent,
+  createStudent,
   updateStudent,
   deleteStudent,
   studentStats,
@@ -84,6 +85,7 @@ import {
   getApplicant,
   updateApplicantStatus,
   updateApplicant,
+  enrolApplicantAsStudent,
 } from '../controllers/applicantController';
 import {
   listAdminUsers,
@@ -113,6 +115,7 @@ router.get('/dashboard', verifyToken, requireRoles(...READ_ROLES), getDashboardS
 router.get('/students', verifyToken, checkAccess('students', 'read'), listStudents);
 router.get('/students/stats', verifyToken, checkAccess('students', 'read'), studentStats);
 router.get('/students/:id', verifyToken, checkAccess('students', 'read'), getStudent);
+router.post('/students', verifyToken, checkAccess('students', 'write'), createStudent);
 router.put('/students/:id', verifyToken, checkAccess('students', 'write'), updateStudent);
 router.delete('/students/:id', verifyToken, checkAccess('students', 'delete'), deleteStudent);
 
@@ -125,6 +128,7 @@ router.get('/applicants', verifyToken, checkAccess('admissions', 'read'), listAp
 router.get('/applicants/:id', verifyToken, checkAccess('admissions', 'read'), getApplicant);
 router.put('/applicants/:id', verifyToken, checkAccess('admissions', 'write'), updateApplicant);
 router.put('/applicants/:id/admission-status', verifyToken, checkAccess('admissions', 'write'), updateApplicantStatus);
+router.post('/applicants/:id/enrol', verifyToken, checkAccess('admissions', 'write'), enrolApplicantAsStudent);
 
 // ─── STAFF ───────────────────────────────────────────────────────────────────
 router.get('/staff', verifyToken, checkAccess('staff', 'read'), listStaff);

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import prisma from '../prisma';
 import { AuthRequest } from '../middleware/auth';
+import { createAuditLog } from './reportController';
 
 // ─── LIST APPLICANTS ──────────────────────────────────────────────────────────
 export async function listApplicants(req: AuthRequest, res: Response) {
@@ -104,11 +105,37 @@ export async function updateApplicantStatus(req: AuthRequest, res: Response) {
       return res.status(404).json({ error: 'Applicant not found.' });
     }
 
+    // Fix Issue 6: Enforce mandatory document verification before admitting
+    if (admissionStatus === 'ADMITTED') {
+      const missingDocs: string[] = [];
+      if (!applicant.oLevelResultUrl) missingDocs.push("O'Level Result");
+      if (!applicant.passportPhotoUrl) missingDocs.push("Passport Photo");
+      if (!applicant.utmeResultUrl && !applicant.jambRegNo) missingDocs.push("UTME Result / JAMB Reg No");
+      if (!applicant.birthCertificateUrl) missingDocs.push("Birth Certificate");
+
+      if (missingDocs.length > 0) {
+        return res.status(400).json({
+          error: `Cannot offer admission: mandatory verification documents are missing (${missingDocs.join(', ')}). All required documents must be uploaded first.`
+        });
+      }
+    }
+
     const updated = await prisma.applicantProfile.update({
       where: { id },
       data: { admissionStatus },
       include: { program: true }
     });
+
+    if (req.user?.userId) {
+      await createAuditLog(
+        req.user.userId,
+        'UPDATE_ADMISSION_STATUS',
+        'ApplicantProfile',
+        applicant.id,
+        JSON.stringify({ oldStatus: applicant.admissionStatus, newStatus: admissionStatus, applicationNo: applicant.applicationNo }),
+        req.ip
+      );
+    }
 
     return res.json({ message: 'Applicant admission status updated.', data: updated });
   } catch (error: any) {
@@ -116,6 +143,50 @@ export async function updateApplicantStatus(req: AuthRequest, res: Response) {
     return res.status(500).json({ error: 'Internal server error.' });
   }
 }
+
+// ─── ENROL ADMITTED APPLICANT AS STUDENT (Single Click) ──────────────────────
+export async function enrolApplicantAsStudent(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params;
+
+    const applicant = await prisma.applicantProfile.findUnique({
+      where: { id },
+      include: { user: true }
+    });
+
+    if (!applicant) {
+      return res.status(404).json({ error: 'Applicant not found.' });
+    }
+
+    if (applicant.admissionStatus !== 'ADMITTED') {
+      return res.status(400).json({ error: 'Applicant must be in ADMITTED status before enrolment.' });
+    }
+
+    // Call matriculation service to transition applicant to student
+    const studentProfile = await matriculateApplicant(applicant.userId);
+
+    if (req.user?.userId) {
+      await createAuditLog(
+        req.user.userId,
+        'ENROL_STUDENT',
+        'StudentProfile',
+        studentProfile.id,
+        JSON.stringify({ applicationNo: applicant.applicationNo, matricNumber: studentProfile.matricNumber }),
+        req.ip
+      );
+    }
+
+    return res.json({
+      message: 'Applicant successfully enrolled as a student.',
+      data: studentProfile,
+      credentials: studentProfile.metadata
+    });
+  } catch (error: any) {
+    console.error('enrolApplicantAsStudent error:', error);
+    return res.status(500).json({ error: error.message || 'Internal server error.' });
+  }
+}
+
 
 // ─── UPDATE APPLICANT ─────────────────────────────────────────────────────────
 export async function updateApplicant(req: AuthRequest, res: Response) {
