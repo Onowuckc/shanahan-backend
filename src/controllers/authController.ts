@@ -308,7 +308,8 @@ export async function registerApplicant(req: Request, res: Response) {
       return { user, profile };
     });
 
-    await sendVerificationEmail(emailClean, verificationToken);
+    const clientUrl = (req.headers.origin as string) || process.env.APPLICANT_PORTAL_URL;
+    await sendVerificationEmail(emailClean, verificationToken, clientUrl);
 
     return res.status(201).json({
       message: 'Applicant registration successful. Please check your email to verify your account.',
@@ -378,7 +379,8 @@ export async function resendVerification(req: Request, res: Response) {
       data: { verificationToken }
     });
 
-    await sendVerificationEmail(user.email, verificationToken);
+    const clientUrl = (req.headers.origin as string) || process.env.APPLICANT_PORTAL_URL;
+    await sendVerificationEmail(user.email, verificationToken, clientUrl);
 
     return res.status(200).json({
       message: 'Verification email has been sent to your inbox.'
@@ -420,7 +422,8 @@ export async function forgotPassword(req: Request, res: Response) {
       }
     });
 
-    await sendPasswordResetEmail(user.email, resetPasswordToken);
+    const clientUrl = (req.headers.origin as string) || process.env.APPLICANT_PORTAL_URL;
+    await sendPasswordResetEmail(user.email, resetPasswordToken, clientUrl);
 
     return res.status(200).json({
       message: 'If the email exists, a password reset link has been sent.'

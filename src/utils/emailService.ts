@@ -25,8 +25,9 @@ function createTransporter() {
   });
 }
 
-export async function sendVerificationEmail(toEmail: string, token: string): Promise<boolean> {
-  const verifyLink = `${APPLICANT_PORTAL_URL}/verify-email?token=${token}`;
+export async function sendVerificationEmail(toEmail: string, token: string, baseUrl?: string): Promise<boolean> {
+  const portalUrl = baseUrl || process.env.APPLICANT_PORTAL_URL || 'http://localhost:5173';
+  const verifyLink = `${portalUrl.replace(/\/+$/, '')}/verify-email?token=${token}`;
   const subject = 'Shanahan University - Verify Your Email Address';
   
   const htmlContent = `
@@ -53,8 +54,9 @@ export async function sendVerificationEmail(toEmail: string, token: string): Pro
   return sendEmail(toEmail, subject, htmlContent, `Verify email link: ${verifyLink}`);
 }
 
-export async function sendPasswordResetEmail(toEmail: string, token: string): Promise<boolean> {
-  const resetLink = `${APPLICANT_PORTAL_URL}/reset-password?token=${token}`;
+export async function sendPasswordResetEmail(toEmail: string, token: string, baseUrl?: string): Promise<boolean> {
+  const portalUrl = baseUrl || process.env.APPLICANT_PORTAL_URL || 'http://localhost:5173';
+  const resetLink = `${portalUrl.replace(/\/+$/, '')}/reset-password?token=${token}`;
   const subject = 'Shanahan University - Password Reset Request';
 
   const htmlContent = `
