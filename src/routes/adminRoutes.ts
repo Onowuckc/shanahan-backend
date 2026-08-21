@@ -54,6 +54,7 @@ import {
 import {
   listStaff,
   getStaff,
+  createStaff,
   updateStaff,
   deleteStaff,
   listCourses,
@@ -135,6 +136,7 @@ router.delete('/applicants/:id', verifyToken, checkAccess('admissions', 'delete'
 // ─── STAFF ───────────────────────────────────────────────────────────────────
 router.get('/staff', verifyToken, checkAccess('staff', 'read'), listStaff);
 router.get('/staff/:id', verifyToken, checkAccess('staff', 'read'), getStaff);
+router.post('/staff', verifyToken, checkAccess('staff', 'write'), createStaff);
 router.put('/staff/:id', verifyToken, checkAccess('staff', 'write'), updateStaff);
 router.delete('/staff/:id', verifyToken, checkAccess('staff', 'delete'), deleteStaff);
 

@@ -1,6 +1,8 @@
 import { Response } from 'express';
+import bcrypt from 'bcryptjs';
 import prisma from '../prisma';
 import { AuthRequest } from '../middleware/auth';
+import { createAuditLog } from './reportController';
 
 // ─── LIST STAFF ───────────────────────────────────────────────────────────────
 export async function listStaff(req: AuthRequest, res: Response) {
@@ -115,6 +117,90 @@ export async function deleteStaff(req: AuthRequest, res: Response) {
   } catch (error: any) {
     console.error('deleteStaff error:', error);
     return res.status(500).json({ error: 'Failed to delete staff member account.' });
+  }
+}
+
+// ─── CREATE STAFF ─────────────────────────────────────────────────────────────
+export async function createStaff(req: AuthRequest, res: Response) {
+  try {
+    const { firstName, lastName, email, role, phoneNumber, departmentId } = req.body;
+
+    if (!firstName || !lastName || !email || !role) {
+      return res.status(400).json({ error: 'First name, last name, email, and role are required.' });
+    }
+
+    const emailClean = email.trim().toLowerCase();
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email: emailClean }
+    });
+    if (existingUser) {
+      return res.status(400).json({ error: 'An account with this email address already exists.' });
+    }
+
+    // Generate unique staffId e.g., SU/STF/26/1042
+    const currentYearShort = new Date().getFullYear().toString().slice(-2);
+    const count = await prisma.staffProfile.count();
+    const sequenceNum = 1001 + count;
+    const staffId = `SU/STF/${currentYearShort}/${sequenceNum}`;
+
+    // Generate temporary password
+    const tempPassword = `SU@stf${Math.floor(1000 + Math.random() * 9000)}`;
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+    // Create user and staff profile transactionally
+    const result = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: emailClean,
+          username: emailClean,
+          password: hashedPassword,
+          role,
+          isEmailVerified: true,
+          isFirstLogin: true,
+        }
+      });
+
+      const staffProfile = await tx.staffProfile.create({
+        data: {
+          staffId,
+          userId: user.id,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          phoneNumber: phoneNumber?.trim() || null,
+          departmentId: departmentId || null,
+        }
+      });
+
+      return { user, staffProfile };
+    });
+
+    if (req.user?.userId) {
+      await createAuditLog(
+        req.user.userId,
+        'CREATE_STAFF',
+        'StaffProfile',
+        result.staffProfile.id,
+        JSON.stringify({ staffId, email: emailClean, role }),
+        req.ip
+      );
+    }
+
+    return res.status(201).json({
+      message: 'Staff member account created successfully.',
+      data: result.staffProfile,
+      credentials: {
+        staffId,
+        email: emailClean,
+        temporaryPassword: tempPassword,
+        role
+      }
+    });
+
+  } catch (error: any) {
+    console.error('createStaff error:', error);
+    return res.status(500).json({ error: 'Internal server error while creating staff member.' });
   }
 }
 
