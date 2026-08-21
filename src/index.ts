@@ -7,13 +7,24 @@ import adminRoutes from './routes/adminRoutes';
 import authRoutes from './routes/authRoutes';
 import studentRoutes from './routes/studentRoutes';
 
+import { sanitizeInputs } from './middleware/validator';
+
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT || 5000;
 
-// Protective HTTP headers
-app.use(helmet());
+// Protective HTTP headers with CSP and HSTS
+app.use(
+  helmet({
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+    strictTransportSecurity: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true
+    }
+  })
+);
 
 // Restrict CORS origins
 const allowedOrigins = [
@@ -34,13 +45,24 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(sanitizeInputs);
 
-// Rate Limiting for Auth routes
+// Global API Rate Limiting (100 req per 15 min per IP)
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests from this IP, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+app.use('/api/', globalLimiter);
+
+// Auth Rate Limiting (15 req per 15 min per IP)
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 15, // Limit each IP to 15 requests per 15 minutes
-  message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: { error: 'Too many authentication attempts from this IP, please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false
 });

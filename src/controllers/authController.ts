@@ -671,3 +671,45 @@ export async function claimAccountActivate(req: Request, res: Response) {
     return res.status(500).json({ error: 'An internal server error occurred.' });
   }
 }
+
+// ─── REFRESH TOKEN ───────────────────────────────────────────────────────────
+export async function refreshToken(req: Request, res: Response) {
+  try {
+    const refreshTokenHeader = req.headers['x-refresh-token'] || req.body?.refreshToken;
+    const authHeader = req.headers['authorization'];
+    const token = refreshTokenHeader || (authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null);
+
+    if (!token) {
+      return res.status(401).json({ error: 'Refresh token required.' });
+    }
+
+    const secret = process.env.JWT_SECRET as string;
+    const decoded = jwt.verify(token as string, secret) as any;
+
+    const user = await prisma.user.findUnique({ where: { id: decoded.userId } });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid user token.' });
+    }
+
+    const newToken = jwt.sign(
+      {
+        userId: user.id,
+        role: user.role,
+        roles: user.roles && user.roles.length > 0 ? user.roles : [user.role],
+        username: user.username
+      },
+      secret,
+      { expiresIn: '8h' }
+    );
+
+    return res.status(200).json({ token: newToken });
+  } catch (error) {
+    return res.status(401).json({ error: 'Invalid or expired refresh token.' });
+  }
+}
+
+// ─── LOGOUT ──────────────────────────────────────────────────────────────────
+export async function logout(req: Request, res: Response) {
+  return res.status(200).json({ message: 'Logged out successfully.' });
+}
+

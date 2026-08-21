@@ -10,7 +10,9 @@ import {
   forgotPassword,
   resetPassword,
   claimAccountVerify,
-  claimAccountActivate
+  claimAccountActivate,
+  refreshToken,
+  logout
 } from '../controllers/authController';
 import { verifyToken } from '../middleware/auth';
 
@@ -18,6 +20,8 @@ const router = Router();
 
 // Public Auth & Ingestion Routes
 router.post('/login', login);
+router.post('/refresh', refreshToken);
+router.post('/logout', logout);
 router.post('/register-applicant', registerApplicant);
 router.post('/verify-email', verifyEmail);
 router.post('/resend-verification', resendVerification);

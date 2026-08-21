@@ -31,7 +31,11 @@ export function verifyToken(req: AuthRequest, res: Response, next: NextFunction)
     }
     req.user = decoded;
     next();
-  } catch (err) {
-    return res.status(401).json({ error: 'Invalid or expired token.' });
+  } catch (err: any) {
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ error: 'Token expired.', code: 'TOKEN_EXPIRED' });
+    }
+    return res.status(401).json({ error: 'Invalid or expired token.', code: 'INVALID_TOKEN' });
   }
 }
+
