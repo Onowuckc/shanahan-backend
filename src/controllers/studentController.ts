@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import prisma from '../prisma';
 import { AuthRequest } from '../middleware/auth';
 import { generateMatricNumber } from '../services/matricService';
+import { createAuditLog } from './reportController';
 
 // ─── LIST STUDENTS ────────────────────────────────────────────────────────────
 export async function listStudents(req: AuthRequest, res: Response) {
@@ -123,6 +124,7 @@ export async function updateStudent(req: AuthRequest, res: Response) {
     const {
       firstName,
       lastName,
+      email,
       phoneNumber,
       gender,
       dateOfBirth,
@@ -148,18 +150,36 @@ export async function updateStudent(req: AuthRequest, res: Response) {
       metadata,
     } = req.body;
 
-    const student = await prisma.studentProfile.findUnique({ where: { id } });
+    const student = await prisma.studentProfile.findUnique({
+      where: { id },
+      include: { user: true }
+    });
     if (!student) return res.status(404).json({ error: 'Student not found.' });
+
+    // Sync User email if email is updated
+    let updatedEmail = student.user.email;
+    if (email && email.trim().toLowerCase() !== student.user.email.toLowerCase()) {
+      const cleanEmail = email.trim().toLowerCase();
+      const existingUser = await prisma.user.findUnique({ where: { email: cleanEmail } });
+      if (existingUser && existingUser.id !== student.userId) {
+        return res.status(400).json({ error: 'A user with this email address already exists.' });
+      }
+      await prisma.user.update({
+        where: { id: student.userId },
+        data: { email: cleanEmail }
+      });
+      updatedEmail = cleanEmail;
+    }
 
     const updated = await prisma.studentProfile.update({
       where: { id },
       data: {
-        ...(firstName && { firstName }),
-        ...(lastName && { lastName }),
-        ...(phoneNumber !== undefined && { phoneNumber }),
-        ...(gender && { gender: gender.toUpperCase() }),
+        ...(firstName && { firstName: firstName.trim() }),
+        ...(lastName && { lastName: lastName.trim() }),
+        ...(phoneNumber !== undefined && { phoneNumber: phoneNumber ? phoneNumber.trim() : null }),
+        ...(gender && { gender: gender.trim().toUpperCase() }),
         ...(dateOfBirth && { dateOfBirth: new Date(dateOfBirth) }),
-        ...(level && { level: parseInt(level) }),
+        ...(level && { level: parseInt(String(level)) }),
         ...(departmentId && { departmentId }),
         ...(programId && { programId }),
         ...(passportPhotoUrl !== undefined && { passportPhotoUrl }),
@@ -183,14 +203,25 @@ export async function updateStudent(req: AuthRequest, res: Response) {
       include: {
         department: { include: { faculty: true } },
         program: true,
-        user: { select: { email: true } },
+        user: { select: { email: true, id: true } },
       },
     });
+
+    if (req.user?.userId) {
+      await createAuditLog(
+        req.user.userId,
+        'UPDATE_STUDENT',
+        'StudentProfile',
+        student.id,
+        JSON.stringify({ matricNumber: student.matricNumber, updatedFields: Object.keys(req.body) }),
+        req.ip
+      );
+    }
 
     return res.json({ message: 'Student updated successfully.', data: updated });
   } catch (error: any) {
     console.error('updateStudent error:', error);
-    return res.status(500).json({ error: 'Internal server error.' });
+    return res.status(500).json({ error: error.message || 'Internal server error.' });
   }
 }
 
@@ -205,13 +236,24 @@ export async function deleteStudent(req: AuthRequest, res: Response) {
     });
     if (!student) return res.status(404).json({ error: 'Student not found.' });
 
+    if (req.user?.userId) {
+      await createAuditLog(
+        req.user.userId,
+        'DELETE_STUDENT',
+        'StudentProfile',
+        student.id,
+        JSON.stringify({ matricNumber: student.matricNumber, name: `${student.firstName} ${student.lastName}` }),
+        req.ip
+      );
+    }
+
     // Cascade delete via user (onDelete: Cascade on StudentProfile)
     await prisma.user.delete({ where: { id: student.userId } });
 
     return res.json({ message: 'Student deleted successfully.' });
   } catch (error: any) {
     console.error('deleteStudent error:', error);
-    return res.status(500).json({ error: 'Internal server error.' });
+    return res.status(500).json({ error: error.message || 'Internal server error.' });
   }
 }
 
