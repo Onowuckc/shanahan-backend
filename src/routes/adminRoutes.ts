@@ -86,6 +86,7 @@ import {
   updateApplicantStatus,
   updateApplicant,
   enrolApplicantAsStudent,
+  deleteApplicant,
 } from '../controllers/applicantController';
 import {
   listAdminUsers,
@@ -129,6 +130,7 @@ router.get('/applicants/:id', verifyToken, checkAccess('admissions', 'read'), ge
 router.put('/applicants/:id', verifyToken, checkAccess('admissions', 'write'), updateApplicant);
 router.put('/applicants/:id/admission-status', verifyToken, checkAccess('admissions', 'write'), updateApplicantStatus);
 router.post('/applicants/:id/enrol', verifyToken, checkAccess('admissions', 'write'), enrolApplicantAsStudent);
+router.delete('/applicants/:id', verifyToken, checkAccess('admissions', 'delete'), deleteApplicant);
 
 // ─── STAFF ───────────────────────────────────────────────────────────────────
 router.get('/staff', verifyToken, checkAccess('staff', 'read'), listStaff);

@@ -690,3 +690,39 @@ export async function verifyApplicantPayment(req: AuthRequest, res: Response) {
   }
 }
 
+// ─── DELETE APPLICANT (Admin / Admissions) ───────────────────────────────────
+export async function deleteApplicant(req: AuthRequest, res: Response) {
+  try {
+    const { id } = req.params;
+    const applicant = await prisma.applicantProfile.findUnique({
+      where: { id },
+      include: { user: true }
+    });
+
+    if (!applicant) {
+      return res.status(404).json({ error: 'Applicant profile not found.' });
+    }
+
+    // Delete associated User (cascades to ApplicantProfile)
+    await prisma.user.delete({
+      where: { id: applicant.userId }
+    });
+
+    if (req.user?.userId) {
+      await createAuditLog(
+        req.user.userId,
+        'DELETE_APPLICANT',
+        'ApplicantProfile',
+        id,
+        JSON.stringify({ applicationNo: applicant.applicationNo, email: applicant.user.email }),
+        req.ip
+      );
+    }
+
+    return res.json({ message: 'Applicant record deleted successfully.' });
+  } catch (error: any) {
+    console.error('deleteApplicant error:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+}
+
